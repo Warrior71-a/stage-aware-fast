@@ -3,15 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WatchLayout } from '../components/WatchLayout';
 import { ArrowLeft, ArrowUp, ArrowDown } from 'lucide-react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-} from 'chart.js';
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Line } from 'recharts';
 
@@ -21,16 +12,6 @@ interface WeightRecord {
   weight: number;
   change: number; // Positive for gain, negative for loss
 }
-
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend
-);
 
 const Weight = () => {
   const navigate = useNavigate();
@@ -124,7 +105,7 @@ const Weight = () => {
               <Line
                 data={weightData}
                 dataKey="weight"
-                xAxisDataKey="date"
+                type="monotone"
                 stroke="#94A3B8"
                 strokeWidth={2}
                 dot={{
