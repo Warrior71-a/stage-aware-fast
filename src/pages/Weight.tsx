@@ -2,9 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WatchLayout } from '../components/WatchLayout';
-import { ArrowLeft, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, ArrowUp, ArrowDown, Scale } from 'lucide-react';
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Line } from 'recharts';
+import { initiateFitbitAuth, hasValidToken, getStoredToken, fetchWeightData, calculateWeightChanges } from '../utils/fitbitAPI';
+import { toast } from "@/hooks/use-toast";
 
 // Define the type for a weight record
 interface WeightRecord {
@@ -16,27 +18,88 @@ interface WeightRecord {
 const Weight = () => {
   const navigate = useNavigate();
   const [weightData, setWeightData] = useState<WeightRecord[]>([]);
+  const [syncing, setSyncing] = useState<boolean>(false);
+  const [connected, setConnected] = useState<boolean>(false);
+  
+  // Check if connected to Fitbit on mount
+  useEffect(() => {
+    setConnected(hasValidToken());
+  }, []);
   
   // Fetch or initialize weight data
   useEffect(() => {
-    const storedData = localStorage.getItem('weightHistory');
-    if (storedData) {
-      setWeightData(JSON.parse(storedData));
-    } else {
-      // Sample data if no history exists
-      const sampleData: WeightRecord[] = [
-        { date: '05/16', weight: 165, change: 0 },
-        { date: '05/17', weight: 164.5, change: -0.5 },
-        { date: '05/18', weight: 165.2, change: 0.7 },
-        { date: '05/19', weight: 164.8, change: -0.4 },
-        { date: '05/20', weight: 164.2, change: -0.6 },
-        { date: '05/21', weight: 164.0, change: -0.2 },
-      ];
-      setWeightData(sampleData);
-      localStorage.setItem('weightHistory', JSON.stringify(sampleData));
-    }
+    const loadData = async () => {
+      // First check if we have data in localStorage
+      const storedData = localStorage.getItem('weightHistory');
+      
+      if (storedData) {
+        setWeightData(JSON.parse(storedData));
+      } else {
+        // Sample data if no history exists
+        const sampleData: WeightRecord[] = [
+          { date: '05/16', weight: 165, change: 0 },
+          { date: '05/17', weight: 164.5, change: -0.5 },
+          { date: '05/18', weight: 165.2, change: 0.7 },
+          { date: '05/19', weight: 164.8, change: -0.4 },
+          { date: '05/20', weight: 164.2, change: -0.6 },
+          { date: '05/21', weight: 164.0, change: -0.2 },
+        ];
+        setWeightData(sampleData);
+        localStorage.setItem('weightHistory', JSON.stringify(sampleData));
+      }
+    };
+    
+    loadData();
   }, []);
 
+  const syncWithFitbit = async () => {
+    // Check if already connected
+    if (!hasValidToken()) {
+      // Start OAuth flow
+      initiateFitbitAuth();
+      return;
+    }
+    
+    // If connected, start syncing
+    setSyncing(true);
+    
+    try {
+      const token = getStoredToken();
+      if (token) {
+        // Fetch weight data from Fitbit
+        const weightEntries = await fetchWeightData(token);
+        
+        if (weightEntries.length > 0) {
+          // Calculate changes between consecutive entries
+          const processedData = calculateWeightChanges(weightEntries);
+          
+          // Update state and localStorage
+          setWeightData(processedData);
+          localStorage.setItem('weightHistory', JSON.stringify(processedData));
+          
+          toast({
+            title: "Sync Complete",
+            description: `Synchronized ${processedData.length} weight records.`,
+          });
+        } else {
+          toast({
+            title: "No Data Found",
+            description: "Could not find any weight data from your Aria 2 scale.",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing with Fitbit:', error);
+      toast({
+        title: "Sync Failed",
+        description: "Could not sync with your Fitbit account.",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+  
   const goBack = () => {
     navigate('/');
   };
@@ -60,14 +123,24 @@ const Weight = () => {
   return (
     <WatchLayout>
       <div className="text-white">
-        <div className="flex items-center mb-3">
-          <button 
-            onClick={goBack}
-            className="p-1.5 mr-2 rounded-full bg-gray-800 hover:bg-gray-700"
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center">
+            <button 
+              onClick={goBack}
+              className="p-1.5 mr-2 rounded-full bg-gray-800 hover:bg-gray-700"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <h2 className="text-lg font-semibold">Weight Tracker</h2>
+          </div>
+          <button
+            onClick={syncWithFitbit}
+            disabled={syncing}
+            className={`p-1.5 rounded-full ${syncing ? 'bg-gray-600' : 'bg-blue-700 hover:bg-blue-600'} ${connected ? 'border border-green-500' : ''}`}
+            title={connected ? "Sync with Fitbit Aria 2" : "Connect Fitbit Aria 2"}
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <Scale className="w-3.5 h-3.5" />
           </button>
-          <h2 className="text-lg font-semibold">Weight Tracker</h2>
         </div>
         
         {/* Current weight and change indicator */}
